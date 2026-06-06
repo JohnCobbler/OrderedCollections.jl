@@ -1,5 +1,8 @@
 using OrderedCollections, Test
 
+# Identity-hashed key used by the "Issue #115" deepcopy test.
+mutable struct IdKey115 end
+
 @testset "OrderedDict" begin
 
     @testset "Constructors" begin
@@ -550,6 +553,37 @@ using OrderedCollections, Test
             pass &= reverse(vs)[n] == v
         end
         @test pass
+    end
+
+    @testset "Issue #115" begin
+        # deepcopy must rehash so lookups still work when the keys hash by identity.
+        d = OrderedDict{IdKey115,Int}()
+        for i in 1:5
+            d[IdKey115()] = i
+        end
+        d2 = deepcopy(d)
+        @test all(haskey(d2, k) for k in keys(d2))
+        @test collect(values(d2)) == collect(values(d))
+
+        # Insertion order is preserved across deepcopy.
+        od = OrderedDict(:a => 1, :b => 2, :c => 3)
+        @test collect(keys(deepcopy(od))) == collect(keys(od))
+
+        # Values are independent copies.
+        dv = OrderedDict(:a => [1, 2, 3])
+        dv2 = deepcopy(dv)
+        push!(dv2[:a], 4)
+        @test dv[:a] == [1, 2, 3]
+
+        # isbitstype keys take the fast path and stay equal.
+        db = OrderedDict(1 => 2, 3 => 4)
+        @test deepcopy(db) == db
+
+        # Self-referential structure terminates and preserves the cycle.
+        oc = OrderedDict{Any,Any}()
+        oc[:self] = oc
+        oc2 = deepcopy(oc)
+        @test oc2[:self] === oc2
     end
 
 end # @testset OrderedDict

@@ -54,6 +54,22 @@ OrderedDict() = OrderedDict{Any,Any}()
 OrderedDict(kv::Tuple{}) = OrderedDict()
 copy(d::OrderedDict) = OrderedDict(d)
 
+function Base.deepcopy_internal(d::OrderedDict, stackdict::IdDict)
+    haskey(stackdict, d) && return stackdict[d]::typeof(d)
+    if isbitstype(eltype(d))
+        return (stackdict[d] = copy(d))
+    end
+    # Re-insert into a fresh dict so the slot index is rebuilt against the
+    # deep-copied keys; copying the slots verbatim would leave them pointing at
+    # the old keys' hashes (issue #115). Mirrors Base's Dict deepcopy_internal.
+    dest = empty(d)
+    stackdict[d] = dest
+    for (k, v) in d
+        dest[Base.deepcopy_internal(k, stackdict)] = Base.deepcopy_internal(v, stackdict)
+    end
+    return dest
+end
+
 # TODO: this can probably be simplified using `eltype` as a THT (Tim Holy trait)
 # OrderedDict{K,V}(kv::Tuple{Vararg{Tuple{K,V}}})     = OrderedDict{K,V}(kv)
 # OrderedDict{K  }(kv::Tuple{Vararg{Tuple{K,Any}}})   = OrderedDict{K,Any}(kv)
